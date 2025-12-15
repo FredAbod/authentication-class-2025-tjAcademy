@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Login Detected</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7fa;
+            padding: 20px;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #9a63ff 0%, #6b46c1 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: #ffffff;
+        }
+        .header h1 {
+            font-size: 26px;
+            margin-bottom: 8px;
+        }
+        .header p {
+            font-size: 15px;
+            opacity: 0.95;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 20px;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #555;
+            margin-bottom: 25px;
+        }
+        .info-box {
+            background-color: #f8f9fc;
+            border: 1px solid #e0e4f0;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e4f0;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .info-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .info-value {
+            color: #2c3e50;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .alert-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 6px;
+        }
+        .alert-box h3 {
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .alert-box p {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #dc3545;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 12px 28px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 15px;
+            margin: 15px 0;
+        }
+        .footer {
+            background-color: #f8f9fc;
+            padding: 25px 30px;
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+        }
+        .footer p {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>🔐 New Login Detected</h1>
+            <p>Security notification for your account</p>
+        </div>
+        
+        <div class="content">
+            <p class="greeting">Hello <%= name %>,</p>
+            
+            <p class="message">
+                We detected a new login to your account. If this was you, you can safely ignore this email.
+            </p>
+            
+            <div class="info-box">
+                <div class="info-row">
+                    <span class="info-label">📧 Email</span>
+                    <span class="info-value"><%= email %></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">🕐 Time</span>
+                    <span class="info-value"><%= new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) %></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">🌍 Location</span>
+                    <span class="info-value"><%= location || 'Unknown' %></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">💻 Device</span>
+                    <span class="info-value"><%= device || 'Web Browser' %></span>
+                </div>
+            </div>
+            
+            <div class="alert-box">
+                <h3>⚠️ Wasn't You?</h3>
+                <p>
+                    If you don't recognize this login activity, your account may have been compromised. 
+                    We recommend changing your password immediately and reviewing your account activity.
+                </p>
+            </div>
+            
+            <center>
+                <a href="<%= resetPasswordUrl || 'http://localhost:5000/api/users/forgot-password' %>" class="cta-button">
+                    Secure My Account
+                </a>
+            </center>
+            
+            <p class="message" style="margin-top: 25px; font-size: 14px; color: #666;">
+                If you have any concerns about your account security, please contact our support team immediately.
+            </p>
+        </div>
+        
+        <div class="footer">
+            <p>This is an automated security notification.</p>
+            <p>Please do not reply to this email.</p>
+            <p style="margin-top: 15px; color: #aaa; font-size: 12px;">
+                © <%= new Date().getFullYear() %> TechyJaunt Academy. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
