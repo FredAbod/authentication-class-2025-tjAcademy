@@ -304,10 +304,224 @@ const flutterwaveWebhook = async (req, res) => {
   }
 };
 
+// Initialize Paystack Transaction (Create Payment Link)
+const paystackInitialize = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { amount, callbackUrl } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    if (!amount) {
+      return res.status(400).json({ message: "Amount is required" });
+    }
+
+    // Get user details for the payment
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Generate a unique transaction reference
+    const reference = `PSK-${Date.now()}-${userId}`;
+
+    // Paystack expects amount in kobo (smallest currency unit)
+    const amountInKobo = Math.round(amount * 100);
+
+    // Create payment payload for Paystack
+    const payload = {
+      email: user.email,
+      amount: amountInKobo,
+      reference: reference,
+      callback_url: callbackUrl || process.env.PAYSTACK_CALLBACK_URL,
+      metadata: {
+        userId: userId,
+        custom_fields: [
+          {
+            display_name: "Customer Name",
+            variable_name: "customer_name",
+            value: user.name,
+          },
+        ],
+      },
+    };
+
+    // Initialize transaction with Paystack
+    const response = await axios.post(
+      "https://api.paystack.co/transaction/initialize",
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data.status) {
+      return res.status(201).json({
+        message: "Payment initialized successfully",
+        authorizationUrl: response.data.data.authorization_url,
+        accessCode: response.data.data.access_code,
+        reference: reference,
+      });
+    } else {
+      return res.status(400).json({
+        message: "Failed to initialize payment",
+        error: response.data.message,
+      });
+    }
+  } catch (e) {
+    console.error("Error initializing Paystack payment:", e);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: e.response?.data?.message || e.message,
+    });
+  }
+};
+
+// Verify Paystack Transaction (Callback Handler)
+const paystackVerify = async (req, res) => {
+  try {
+    const { reference } = req.query;
+
+    if (!reference) {
+      return res.status(400).json({ message: "Transaction reference is required" });
+    }
+
+    // Verify the transaction with Paystack
+    const response = await axios.get(
+      `https://api.paystack.co/transaction/verify/${reference}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        },
+      }
+    );
+
+    const { data } = response.data;
+
+    if (data.status === "success") {
+      // Extract userId from reference (format: PSK-timestamp-userId)
+      const refParts = reference.split("-");
+      const userId = refParts[refParts.length - 1];
+
+      // Convert amount from kobo back to main currency
+      const amount = data.amount / 100;
+
+      // Find user's wallet and credit it
+      const wallet = await Wallet.findOne({ userId: userId });
+
+      if (wallet) {
+        // Credit the wallet
+        await Wallet.findOneAndUpdate(
+          { userId: userId },
+          { $inc: { balance: amount } },
+          { new: true }
+        );
+
+        const user = await User.findById(userId);
+        if (user) {
+          console.log(`Wallet funded via Paystack for user: ${user.email}, Amount: ${amount} NGN`);
+        }
+
+        return res.status(200).json({
+          message: "Payment verified and wallet funded successfully",
+          amount: amount,
+          reference: reference,
+        });
+      } else {
+        return res.status(404).json({ message: "Wallet not found" });
+      }
+    } else {
+      return res.status(400).json({
+        message: "Payment verification failed",
+        status: data.status,
+      });
+    }
+  } catch (e) {
+    console.error("Error verifying Paystack payment:", e);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: e.response?.data?.message || e.message,
+    });
+  }
+};
+
+// Paystack Webhook Handler
+const paystackWebhook = async (req, res) => {
+  try {
+    const crypto = require("crypto");
+    const secret = process.env.PAYSTACK_SECRET_KEY;
+
+    // Verify webhook signature
+    const hash = crypto
+      .createHmac("sha512", secret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+
+    if (hash !== req.headers["x-paystack-signature"]) {
+      console.log("Invalid Paystack webhook signature");
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const event = req.body;
+
+    // Handle charge.success event
+    if (event.event === "charge.success") {
+      const { reference, amount, metadata } = event.data;
+
+      // Extract userId from reference or metadata
+      let userId;
+      if (metadata?.userId) {
+        userId = metadata.userId;
+      } else {
+        const refParts = reference.split("-");
+        userId = refParts[refParts.length - 1];
+      }
+
+      // Convert amount from kobo to main currency
+      const amountInNaira = amount / 100;
+
+      // Find user's wallet and credit it
+      const wallet = await Wallet.findOne({ userId: userId });
+
+      if (wallet) {
+        await Wallet.findOneAndUpdate(
+          { userId: userId },
+          { $inc: { balance: amountInNaira } },
+          { new: true }
+        );
+
+        const user = await User.findById(userId);
+        if (user) {
+          console.log(`Wallet funded via Paystack webhook for user: ${user.email}, Amount: ${amountInNaira} NGN`);
+        }
+
+        return res.status(200).json({ message: "Wallet funded successfully" });
+      } else {
+        console.error("Wallet not found for userId:", userId);
+        return res.status(404).json({ message: "Wallet not found" });
+      }
+    }
+
+    // Acknowledge other events
+    return res.status(200).json({ message: "Webhook received" });
+  } catch (e) {
+    console.error("Paystack webhook error:", e);
+    return res.status(500).json({ message: "Webhook processing failed" });
+  }
+};
+
 module.exports = {
   createWallet,
   getAllWallets,
   transferFunds,
   createRedirectUrl,
   flutterwaveWebhook,
+  paystackInitialize,
+  paystackVerify,
+  paystackWebhook,
 };
