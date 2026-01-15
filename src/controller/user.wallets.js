@@ -240,6 +240,8 @@ const flutterwaveWebhook = async (req, res) => {
 
     const payload = req.body;
 
+    console.log("Flutterwave Webhook Payload:", payload);
+
     // Check if payment was successful
     if (payload.status === "successful" && payload.event === "charge.completed") {
       const { tx_ref, amount, currency, id: transactionId } = payload.data;
@@ -253,6 +255,8 @@ const flutterwaveWebhook = async (req, res) => {
           },
         }
       );
+
+      console.log("Flutterwave Verify Response:", verifyResponse.data);
 
       const verifyData = verifyResponse.data;
 
@@ -269,6 +273,8 @@ const flutterwaveWebhook = async (req, res) => {
         // Find user's wallet and credit it
         const wallet = await Wallet.findOne({ userId: userId });
 
+        console.log("User Wallet Found:", wallet);
+
         if (wallet) {
           // Credit the wallet
           await Wallet.findOneAndUpdate(
@@ -279,6 +285,7 @@ const flutterwaveWebhook = async (req, res) => {
 
           // Get user for email notification
           const user = await User.findById(userId);
+          console.log("User Found for Email Notification:", user);
 
           if (user) {
             // Send success email (optional)
