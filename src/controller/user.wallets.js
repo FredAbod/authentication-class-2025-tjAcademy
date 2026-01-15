@@ -243,7 +243,7 @@ const flutterwaveWebhook = async (req, res) => {
     console.log("Flutterwave Webhook Payload:", payload);
 
     // Check if payment was successful
-    if (payload.status === "successful" && payload.event === "charge.completed") {
+    if (payload.data.status === "successful" && payload.event === "charge.completed") {
       const { tx_ref, amount, currency, id: transactionId } = payload.data;
 
       // Verify the transaction with Flutterwave
