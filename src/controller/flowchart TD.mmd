@@ -1,0 +1,37 @@
+flowchart TD
+    subgraph Step1["📱 STEP 1: You Pick Your Photo"]
+        A["🧒 You select a nice picture<br/>from your phone or computer"]
+    end
+
+    subgraph Step2["🚪 STEP 2: Multer - The Security Guard"]
+        B["🔐 Multer checks the picture<br/>Is it JPG, PNG, or allowed type?"]
+        B1["✅ YES - Picture is allowed!"]
+        B2["❌ NO - Sorry, try another picture"]
+    end
+
+    subgraph Step3["☁️ STEP 3: Cloudinary - The Cloud Storage"]
+        C["📤 Picture flies up to the cloud<br/>Cloudinary stores it safely online"]
+        C1["🔗 Cloudinary gives back a special link<br/>like: https://cloudinary.com/your_picture.jpg"]
+    end
+
+    subgraph Step4["💾 STEP 4: Database - The Memory Book"]
+        D["📚 MongoDB saves the picture link<br/>in your user profile"]
+        D1["✨ Done! Your profile picture is saved!"]
+    end
+
+    A --> B
+    B --> B1
+    B --> B2
+    B1 --> C
+    C --> C1
+    C1 --> D
+    D --> D1
+
+    style A fill:#e1f5fe,stroke:#01579b
+    style B fill:#fff3e0,stroke:#e65100
+    style B1 fill:#c8e6c9,stroke:#2e7d32
+    style B2 fill:#ffcdd2,stroke:#c62828
+    style C fill:#f3e5f5,stroke:#7b1fa2
+    style C1 fill:#e8f5e9,stroke:#388e3c
+    style D fill:#e3f2fd,stroke:#1565c0
+    style D1 fill:#c8e6c9,stroke:#2e7d32

@@ -218,8 +218,8 @@ const createRedirectUrl = async (req, res) => {
 
     // Add Transaction Record Here 
     const newTransaction = new Transaction({
-      userId: mongoose.Types.ObjectId(userId),
-      walletId: mongoose.Types.ObjectId(wallet._id),
+      userId: userId,
+      walletId: wallet._id,
       referenceNumber: txRef,
       type: "credit",
       amount: amount,
@@ -239,6 +239,7 @@ const createRedirectUrl = async (req, res) => {
     });
   } catch (e) {
     console.error("Error creating redirect URL:", e);
+    console.log(e)
     return res
       .status(500)
       .json({ message: "Internal server error", error: e.message });
@@ -247,6 +248,8 @@ const createRedirectUrl = async (req, res) => {
 
 // Flutterwave Webhook Handler
 const flutterwaveWebhook = async (req, res) => {
+  const session = await mongoose.startSession();
+  
   try {
     // Verify the webhook signature
     const secretHash = process.env.FLW_SECRET_HASH;
@@ -289,25 +292,59 @@ const flutterwaveWebhook = async (req, res) => {
         const txParts = tx_ref.split("-");
         const userId = txParts[txParts.length - 1];
 
-        // Find Transaction Record 
-        const transactionRecord = await Transaction.findOne({ referenceNumber: tx_ref });
-        console.log("Transaction Record Found:", transactionRecord);
+        // Start the transaction
+        session.startTransaction();
 
-        // Find user's wallet with the wallet id from transaction and credit it
-        const wallet = await Wallet.findOne({ _id: transactionRecord.walletId });
+        // Atomically lock the transaction record by updating status to "processing"
+        // This prevents duplicate webhook processing (idempotency)
+        const transactionRecord = await Transaction.findOneAndUpdate(
+          { 
+            referenceNumber: tx_ref, 
+            status: "pending" // Only process if still pending
+          },
+          { 
+            $set: { 
+              status: "processing",
+              lockedAt: new Date()
+            } 
+          },
+          { 
+            new: true, 
+            session 
+          }
+        );
+        console.log("Transaction Record Found and Locked:", transactionRecord);
 
-        console.log("User Wallet Found:", wallet);
+        if (!transactionRecord) {
+          await session.abortTransaction();
+          // Check if already processed or not found
+          const existingTransaction = await Transaction.findOne({ referenceNumber: tx_ref });
+          if (existingTransaction && existingTransaction.status !== "pending") {
+            console.log("Transaction already processed:", existingTransaction.status);
+            return res.status(200).json({ message: "Transaction already processed" });
+          }
+          return res.status(404).json({ message: "Transaction record not found" });
+        }
+
+        // Atomically lock and update the wallet balance
+        // Using findOneAndUpdate ensures atomic operation and prevents race conditions
+        const wallet = await Wallet.findOneAndUpdate(
+          { _id: transactionRecord.walletId },
+          { 
+            $inc: { balance: amount },
+            $set: { lastUpdatedAt: new Date() }
+          },
+          { 
+            new: true, 
+            session 
+          }
+        );
+
+        console.log("User Wallet Found and Updated:", wallet);
 
         if (wallet) {
-          // Credit the wallet
-          await Wallet.findOneAndUpdate(
-            { _id: transactionRecord.walletId },
-            { $inc: { balance: amount } },
-            { new: true }
-          );
-
           // Get user for email notification
-          const user = await User.findById(transactionRecord.userId);
+          const user = await User.findById(transactionRecord.userId).session(session);
           console.log("User Found for Email Notification:", user);
 
           if (user) {
@@ -315,15 +352,25 @@ const flutterwaveWebhook = async (req, res) => {
             console.log(`Wallet funded successfully for user: ${user.email}, Amount: ${amount} ${currency}`);
           }
 
-          // Update the transaction status to successful
+          // Update the transaction status to successful and record completion
           await Transaction.findOneAndUpdate(
             { referenceNumber: tx_ref },
-            { status: "successful" },
-            { new: true }
+            { 
+              $set: { 
+                status: "successful",
+                completedAt: new Date(),
+                lockedAt: null
+              } 
+            },
+            { new: true, session }
           );
+
+          // Commit the transaction
+          await session.commitTransaction();
 
           return res.status(200).json({ message: "Wallet funded successfully" });
         } else {
+          await session.abortTransaction();
           console.error("Wallet not found for userId:", userId);
           return res.status(404).json({ message: "Wallet not found" });
         }
@@ -336,8 +383,15 @@ const flutterwaveWebhook = async (req, res) => {
     // For other events, just acknowledge receipt
     return res.status(200).json({ message: "Webhook received" });
   } catch (e) {
+    // Abort the transaction on error
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     console.error("Webhook error:", e);
     return res.status(500).json({ message: "Webhook processing failed" });
+  } finally {
+    // End the session
+    session.endSession();
   }
 };
 
